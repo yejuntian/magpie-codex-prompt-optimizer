@@ -4,8 +4,8 @@
  * No code from Codex++ is copied into this file.
  */
 (() => {
-  const VERSION = "0.1.5";
-  const OWNER = "magpie-codex-prompt-optimizer-v0_1_5";
+  const VERSION = "0.1.7";
+  const OWNER = "magpie-codex-prompt-optimizer-v0_1_7";
   const API_KEY = "__magpieCodexPromptOptimizer";
   const SETTINGS_KEY = "magpie.codex.promptOptimizer.settings.v1";
   const STYLE_ID = `mcpo-style-${OWNER}`;
@@ -192,6 +192,7 @@
       #${BUTTON_ID}:hover { background: linear-gradient(180deg, #14a398 0%, #0d9488 100%); box-shadow: 0 3px 10px rgba(15, 118, 110, .28); transform: translateY(-1px); }
       #${BUTTON_ID}[data-state="loading"] { min-width: 60px; background: #92400e; border-color: #d97706; box-shadow: 0 2px 8px rgba(146, 64, 14, .22); }
       #${BUTTON_ID}[data-state="optimized"] { min-width: 60px; background: #047857; border-color: #10b981; box-shadow: 0 2px 8px rgba(4, 120, 87, .22); }
+      #${BUTTON_ID}[data-compact="true"] { min-width: 28px; width: 28px; padding: 0; }
       #mcpo-float-${OWNER} { position: fixed; z-index: 2147483000; pointer-events: none; }
       #mcpo-float-${OWNER} > #${BUTTON_ID} { pointer-events: auto; }
       #${PANEL_ID} {
@@ -575,21 +576,41 @@
     runtime.anchored = false;
     const host = ensureFloatingHost();
     if (button.parentElement !== host) host.appendChild(button);
+    const state = currentState();
+    button.dataset.state = state;
+    button.disabled = runtime.disposed;
+    button.setAttribute("aria-label", buttonTitle(state));
+    button.setAttribute("title", buttonTitle(state));
+    button.textContent = buttonLabel(state);
     if (shell) {
       const shellRect = shell.getBoundingClientRect();
       const modelRect = model?.getBoundingClientRect?.();
       const prefixRect = prefixControl?.getBoundingClientRect?.();
-      const buttonRect = button.getBoundingClientRect();
-      const buttonWidth = buttonRect.width || 48;
-      const buttonHeight = buttonRect.height || 28;
       const anchorRect = prefixRect || modelRect;
-      const preferredLeft = anchorRect ? anchorRect.left - buttonWidth - 10 : shellRect.right - buttonWidth - 18;
-      const preferredTop = modelRect ? modelRect.top + (modelRect.height - buttonHeight) / 2 : shellRect.bottom - buttonHeight - 11;
+      const rowRect = modelRect || anchorRect;
+      button.dataset.compact = "false";
+      host.style.display = "";
+      const buttonHeight = button.getBoundingClientRect().height || 28;
+      const preferredTop = rowRect ? rowRect.top + (rowRect.height - buttonHeight) / 2 : shellRect.bottom - buttonHeight - 11;
+      const leftControls = Array.from(shell.querySelectorAll("button, [role='button'], [aria-label], [title]"))
+        .filter((element) => element !== model && element !== prefixControl && visible(element))
+        .map((element) => element.getBoundingClientRect())
+        .filter((rect) => rect.width <= 260 && rect.right <= (anchorRect?.left || shellRect.right) && rect.bottom > preferredTop && rect.top < preferredTop + buttonHeight);
+      const leftBoundary = Math.max(shellRect.left + 8, ...leftControls.map((rect) => rect.right + 8));
+      let buttonWidth = button.getBoundingClientRect().width || 48;
+      let preferredLeft = anchorRect ? anchorRect.left - buttonWidth - 10 : shellRect.right - buttonWidth - 18;
+      if (preferredLeft < leftBoundary) {
+        button.dataset.compact = "true";
+        button.textContent = state === "loading" ? "止" : state === "optimized" ? "还" : "优";
+        buttonWidth = button.getBoundingClientRect().width || 28;
+        preferredLeft = anchorRect ? anchorRect.left - buttonWidth - 8 : shellRect.right - buttonWidth - 18;
+      }
+      host.style.display = preferredLeft >= leftBoundary && preferredLeft >= 12 ? "" : "none";
       host.style.right = "";
       host.style.bottom = "";
-      host.style.left = `${Math.round(Math.max(12, Math.min(innerWidth - buttonWidth - 12, preferredLeft)))}px`;
+      host.style.left = `${Math.round(preferredLeft)}px`;
       host.style.top = `${Math.round(Math.max(12, Math.min(innerHeight - buttonHeight - 12, preferredTop)))}px`;
-      const observedElements = [shell, model, prefixControl].filter(Boolean);
+      const observedElements = [shell, model, prefixControl, ...Array.from(shell.querySelectorAll("button, [role='button']"))].filter(Boolean);
       const unchanged = observedElements.length === runtime.observedElements.length
         && observedElements.every((element, index) => element === runtime.observedElements[index]);
       if (!unchanged) {
@@ -599,17 +620,8 @@
         runtime.observedElements = observedElements;
       }
     } else {
-      host.style.left = "";
-      host.style.top = "";
-      host.style.right = "22px";
-      host.style.bottom = "22px";
+      host.style.display = "none";
     }
-    const state = currentState();
-    button.dataset.state = state;
-    button.disabled = runtime.disposed;
-    button.setAttribute("aria-label", buttonTitle(state));
-    button.setAttribute("title", buttonTitle(state));
-    button.textContent = buttonLabel(state);
     bindInputWatch();
   }
 
@@ -642,7 +654,8 @@
   function sendBridgeEvent(payload) {
     try {
       const binding = window.magpieCpoBridge || globalThis.magpieCpoBridge;
-      if (typeof binding === "function") binding(JSON.stringify(payload));
+      if (typeof binding !== "function") return false;
+      binding(JSON.stringify(payload));
       return true;
     } catch {
       return false;
@@ -683,6 +696,30 @@
       const sent = sendBridgeEvent({ type: "optimize", requestId, text });
       if (!sent) {
         cleanup();
+        reject(new Error("Magpie 本地桥接不可用，请重新注入页面"));
+      }
+    });
+  }
+
+  function saveSettingsThroughCdp(settings, secret) {
+    const requestId = `mcpo-settings-${Date.now()}-${++bridgeSequence}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingBridge.delete(requestId);
+        reject(new Error("保存设置超时，请检查 Magpie 插件服务"));
+      }, 10000);
+      pendingBridge.set(requestId, {
+        resolve: (result) => {
+          clearTimeout(timer);
+          pendingBridge.delete(requestId);
+          if (result?.ok) resolve(result.settings);
+          else reject(new Error(result?.error || "保存设置失败"));
+        },
+      });
+      const patch = secret ? { ...settings, apiKey: secret } : settings;
+      if (!sendBridgeEvent({ type: "settings.changed", requestId, settings: patch })) {
+        clearTimeout(timer);
+        pendingBridge.delete(requestId);
         reject(new Error("Magpie 本地桥接不可用，请重新注入页面"));
       }
     });
@@ -792,8 +829,8 @@
     overlay.innerHTML = `
       <div class="mcpo-card" role="dialog" aria-modal="true" aria-label="Prompt Optimize 设置">
         <h2>Prompt Optimize 设置</h2>
-        <p class="mcpo-sub">右键阅读器里的“优化”按钮可再次打开。API Key 只能在 Magpie 插件页中配置。</p>
-        <p class="mcpo-status">请求由 Magpie 本机服务构造并发出；Codex 页面不会收到 API Key。</p>
+        <p class="mcpo-sub">右键“优化”按钮可再次打开。留空密钥输入框会保留已保存的密钥。</p>
+        <p class="mcpo-status">密钥经本机桥接保存，不写入 Codex 的页面存储；请求由 Magpie 本机服务发出。</p>
         <div class="mcpo-grid">
           <label>协议
             <select data-field="protocol">
@@ -806,6 +843,9 @@
           </label>
           <label class="mcpo-full">Base URL
             <input data-field="baseUrl" type="url" spellcheck="false" placeholder="https://api.openai.com/v1">
+          </label>
+          <label class="mcpo-full">API Key
+            <input data-field="apiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="输入 API Key">
           </label>
           <label>默认风格
             <select data-field="style">
@@ -828,7 +868,7 @@
             <textarea data-prompt="coding"></textarea>
           </div>
         </div>
-        <p class="mcpo-note">点击优化会把输入框全文发送到你配置的 API 服务商。请在 Magpie 插件页配置或清除 API Key。</p>
+        <p class="mcpo-note">点击优化会把输入框全文发送到你配置的 API 服务商。清除已保存的密钥请使用 Magpie 插件页。</p>
         <div class="mcpo-actions">
           <button type="button" data-action="close">取消</button>
           <button type="button" class="mcpo-primary" data-action="save">保存</button>
@@ -840,6 +880,7 @@
     field("baseUrl").value = settings.baseUrl;
     field("model").value = settings.model;
     field("style").value = settings.style;
+    field("apiKey").placeholder = settings.hasApiKey ? "已保存；留空则保持不变" : "输入 API Key";
     for (const key of Object.keys(DEFAULT_PROMPTS)) overlay.querySelector(`[data-prompt="${key}"]`).value = settings.systemPrompts[key];
     field("protocol").addEventListener("change", () => {
       const protocol = field("protocol").value;
@@ -856,22 +897,33 @@
       if (event.target === overlay) closeSettings();
     });
     overlay.querySelector('[data-action="close"]').addEventListener("click", closeSettings);
-    overlay.querySelector('[data-action="save"]').addEventListener("click", () => {
+    overlay.querySelector('[data-action="save"]').addEventListener("click", async () => {
+      const saveButton = overlay.querySelector('[data-action="save"]');
+      if (saveButton.disabled) return;
+      const secret = field("apiKey").value.trim();
       const next = {
         protocol: field("protocol").value === "anthropic" ? "anthropic" : "openai",
         baseUrl: field("baseUrl").value.trim(),
-        hasApiKey: settings.hasApiKey,
         model: field("model").value.trim(),
         style: field("style").value,
         systemPrompts: Object.fromEntries(Object.keys(DEFAULT_PROMPTS).map((key) => [key, overlay.querySelector(`[data-prompt="${key}"]`).value])),
       };
-      if (!settingsReady(next)) {
-        showToast("Base URL 和模型不能为空；API Key 请在 Magpie 插件页配置", "warn");
+      if (!next.baseUrl || !next.model || (!settings.hasApiKey && !secret)) {
+        showToast("请填写 Base URL、模型和 API Key", "warn");
         return;
       }
-      saveSettings(next);
-      closeSettings();
-      showToast("设置已保存", "ok");
+      saveButton.disabled = true;
+      try {
+        const saved = await saveSettingsThroughCdp(next, secret);
+        runtime.settings = normalizeSettings(saved);
+        field("apiKey").value = "";
+        closeSettings();
+        showToast("设置已保存", "ok");
+      } catch (error) {
+        showToast(error.message, "error");
+      } finally {
+        saveButton.disabled = false;
+      }
     });
     document.documentElement.appendChild(overlay);
   }
@@ -882,10 +934,7 @@
       runtime.ensureFrame = requestAnimationFrame(() => {
         runtime.ensureFrame = 0;
         if (runtime.disposed || document.getElementById(PANEL_ID)) return;
-        const button = document.getElementById(BUTTON_ID);
-        const input = findComposerInput();
-        const shell = findComposerShell(input);
-        if (!button || !button.isConnected || !visible(button) || (runtime.anchored && (!shell || !shell.contains(button)))) ensureButton();
+        ensureButton();
       });
     };
     runtime.scheduleRepair = scheduleRepair;

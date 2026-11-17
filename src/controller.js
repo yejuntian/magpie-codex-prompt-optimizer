@@ -180,6 +180,7 @@ export class PromptOptimizerController {
     this.injectionSource = null;
     this.lastInjectedAt = null;
     this.startedAt = Date.now();
+    this.configPath = options.configPath;
   }
 
   async source() {
@@ -325,11 +326,14 @@ export class PromptOptimizerController {
     if (message.type === "settings.changed" && message.settings && typeof message.settings === "object") {
       try {
         const { mergeSettings, saveSettings } = await import("./config.js");
-        this.settings = mergeSettings(this.settings, message.settings);
-        await saveSettings(this.settings);
-        await this.onSettingsChanged(this.settings);
+        const next = mergeSettings(this.settings, message.settings);
+        await saveSettings(next, this.configPath);
+        this.settings = next;
+        await this.onSettingsChanged(next);
+        if (message.requestId) await this.sendBridgeResult(session, message.requestId, { ok: true, settings: publicSettings(next) });
       } catch (error) {
         this.lastError = error.message;
+        if (message.requestId) await this.sendBridgeResult(session, message.requestId, { ok: false, error: error.message });
       }
       return;
     }

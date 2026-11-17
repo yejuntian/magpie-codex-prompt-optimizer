@@ -74,6 +74,7 @@ export async function createApplication(options = {}) {
   const forcedPort = Number(options.port ?? process.env.CPO_PORT ?? loaded.servicePort);
   let settings = mergeSettings(loaded, { servicePort: forcedPort }, { forcePort: forcedPort });
   const controller = new PromptOptimizerController(settings, {
+    configPath: options.configPath,
     onSettingsChanged: async (next) => {
       settings = next;
     },
