@@ -1,0 +1,46 @@
+{
+  "name": "magpie-codex-prompt-optimizer",
+  "version": "0.1.5",
+  "description": "Open-source Magpie plugin that adds prompt optimization to the Codex desktop composer.",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node scripts/start.mjs",
+    "inject": "node scripts/inject.mjs",
+    "launch:codex": "node scripts/launch-codex.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "magpie": {
+    "page": {
+      "title": "Codex Prompt Optimizer",
+      "file": "page/index.html",
+      "icon": "page/icon.svg",
+      "keepAlive": true,
+      "service": {
+        "port": 47821,
+        "option": "servicePort"
+      }
+    },
+    "permissions": []
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yejuntian/magpie-codex-prompt-optimizer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yejuntian/magpie-codex-prompt-optimizer/issues"
+  },
+  "homepage": "https://github.com/yejuntian/magpie-codex-prompt-optimizer#readme",
+  "keywords": [
+    "magpie",
+    "codex",
+    "prompt-optimizer",
+    "openai",
+    "anthropic"
+  ]
+}

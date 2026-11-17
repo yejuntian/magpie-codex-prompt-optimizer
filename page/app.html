@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="magpie-cpo-token" content="__MAGPIE_CPO_UI_TOKEN__">
+  <title>Codex Prompt Optimizer</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Magpie × Codex</p>
+      <h1>Prompt Optimizer</h1>
+      <p class="lead">在 Codex 输入框旁注入“优化”：一键整理提示词，再次点击还原。API 请求由本机服务发出。</p>
+    </div>
+    <img src="icon.svg" alt="" width="64" height="64">
+  </header>
+
+  <section class="status-card" aria-live="polite">
+    <div class="status-title">
+      <span class="dot" id="status-dot"></span>
+      <strong id="status-title">正在连接本地服务</strong>
+    </div>
+    <p id="status-detail">请稍候…</p>
+    <div class="status-grid">
+      <div><span>Codex 页面</span><strong id="target-count">0</strong></div>
+      <div><span>已注入</span><strong id="injected-count">0</strong></div>
+      <div><span>请求中</span><strong id="request-count">0</strong></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>连接 Codex</h2>
+    <label>调试地址
+      <input id="cdp-endpoint" type="url" spellcheck="false" value="http://127.0.0.1:9333">
+    </label>
+    <div class="button-row">
+      <button id="attach" type="button">连接并注入</button>
+      <button id="launch" class="secondary" type="button">重启 Codex 并注入</button>
+      <button id="detach" class="ghost" type="button">断开</button>
+    </div>
+    <p class="hint">首次启用时使用一次“重启 Codex”。之后普通重启 Codex 也会保留本机调试开关，并自动重新注入；未保存的对话草稿请先自行确认。</p>
+  </section>
+
+  <section class="panel">
+    <h2>模型配置</h2>
+    <div class="form-grid">
+      <label>协议
+        <select id="protocol">
+          <option value="openai">OpenAI 兼容 · Chat Completions</option>
+          <option value="anthropic">Anthropic · Messages</option>
+        </select>
+      </label>
+      <label>模型
+        <input id="model" type="text" spellcheck="false" placeholder="gpt-4o-mini">
+      </label>
+      <label class="full">Base URL
+        <input id="base-url" type="url" spellcheck="false" placeholder="https://api.openai.com/v1">
+      </label>
+      <label class="full">API Key
+        <input id="api-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="留空则保留当前密钥">
+      </label>
+      <label>优化风格
+        <select id="style">
+          <option value="concise">简洁</option>
+          <option value="structured">结构化</option>
+          <option value="coding">编程</option>
+        </select>
+      </label>
+      <label class="checkbox"><input id="auto-attach" type="checkbox"> Magpie 启动时自动连接</label>
+    </div>
+
+    <details>
+      <summary>自定义 System Prompt</summary>
+      <label>简洁
+        <textarea id="prompt-concise" spellcheck="false"></textarea>
+      </label>
+      <label>结构化
+        <textarea id="prompt-structured" spellcheck="false"></textarea>
+      </label>
+      <label>编程
+        <textarea id="prompt-coding" spellcheck="false"></textarea>
+      </label>
+    </details>
+
+    <div class="button-row">
+      <button id="save" class="primary" type="button">保存并注入</button>
+      <button id="clear-key" class="ghost" type="button">清除 API Key</button>
+      <button id="refresh" class="ghost" type="button">刷新状态</button>
+    </div>
+    <p id="message" class="message"></p>
+  </section>
+
+  <footer>
+    <p>仅支持 HTTPS API，可连接局域网或解析到内网的域名；回环、链路本地地址和重定向会被拒绝。API Key 只保存在权限为 0600 的本机配置文件中，不会注入 Codex 页面。</p>
+  </footer>
+</body>
+</html>
